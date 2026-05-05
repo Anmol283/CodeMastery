@@ -79,8 +79,18 @@ const getOrCreateUser = async (req, res, next) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Update last login
-    await user.update({ last_login: new Date() });
+    // Update last login using raw query to avoid Sequelize validation issues
+    try {
+      const lastLogin = new Date();
+      await User.sequelize.query(
+        'UPDATE users SET last_login = ?, updated_at = ? WHERE id = ?',
+        { replacements: [lastLogin, lastLogin, req.userId], type: User.sequelize.QueryTypes.UPDATE }
+      );
+    } catch (updateError) {
+      console.warn('Failed to update last_login:', updateError.message);
+      // Continue even if last_login update fails - don't block the request
+    }
+    
     req.dbUser = user;
     next();
   } catch (error) {

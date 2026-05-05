@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
       ],
     },
     server: {
-      port: 3000,
+      port: 5173,
       open: true,
       watch: {
         usePolling: true,
@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
       hmr: {
         protocol: 'ws',
         host: 'localhost',
-        port: process.env.PORT_HMR ? parseInt(process.env.PORT_HMR) : 3000,
+        port: process.env.PORT_HMR ? parseInt(process.env.PORT_HMR) : 5173,
       },
       proxy: {
         '/api': {

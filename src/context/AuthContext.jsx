@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { isAdminEmail, normalizeRole } from '../utils/roles';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  signInWithPopup,
+} from 'firebase/auth';
+import { auth, googleProvider, githubProvider } from '../config/firebase';
 
 const AuthContext = createContext(null);
 
@@ -411,6 +419,42 @@ export function AuthProvider({ children }) {
     hydrateFromStorage();
     setIsLoading(false);
 
+    // Firebase Auth State Listener
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in
+        const users = readUsers();
+        let localUser = users.find((u) => u.id === firebaseUser.uid);
+        
+        if (!localUser) {
+          // Create a new local user based on Firebase user
+          localUser = {
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+            password: '', // Firebase manages passwords, not stored locally
+            createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+            avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+            profile: {
+              ...DEFAULT_PROFILE,
+              id: firebaseUser.uid,
+              email: firebaseUser.email,
+              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+              createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+            },
+          };
+          users.push(localUser);
+          writeUsers(users);
+        }
+        
+        setProfile(buildProfileFromAccount(localUser));
+      } else {
+        // User is signed out
+        setProfile(null);
+      }
+    });
+
     const handleStorage = (event) => {
       if (event.key === AUTH_SYNC_STORAGE_KEY && event.newValue) {
         try {
@@ -444,6 +488,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       window.removeEventListener('storage', handleStorage);
+      unsubscribe();
     };
   }, []);
 
@@ -500,39 +545,66 @@ export function AuthProvider({ children }) {
   const signup = async ({ name, email, password, rememberMe = true }) => {
     const normalizedEmail = String(email || '').trim().toLowerCase();
     const trimmedPassword = String(password || '');
+    const trimmedName = String(name || '').trim();
 
     if (!normalizedEmail || !trimmedPassword) {
       throw new Error('Email and password are required.');
     }
 
-    const apiBaseUrl = getAuthApiBaseUrl();
-    const username = createUsernameFromSignup(name, normalizedEmail);
-
     try {
-      const response = await fetch(`${apiBaseUrl}/register`, {
+      // Create user with Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, trimmedPassword);
+      const firebaseUser = userCredential.user;
+      
+      // Get Firebase ID token
+      const idToken = await firebaseUser.getIdToken();
+
+      // Sync with backend database
+      const apiBaseUrl = getAuthApiBaseUrl();
+      const syncResponse = await fetch(`${apiBaseUrl}/firebase-sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: normalizedEmail,
-          username,
-          password: trimmedPassword,
+          firebaseUid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: trimmedName,
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Unable to create account.');
+      if (!syncResponse.ok) {
+        throw new Error('Failed to sync with backend');
       }
 
-      if (!data.token || !data.user) {
-        throw new Error('Registration succeeded but no authentication data was returned.');
-      }
+      const syncData = await syncResponse.json();
 
       const loginTimestamp = new Date().toISOString();
-      const backendAccount = buildBackendAccount(data.user, trimmedPassword);
-      const nextProfile = mergeProfileUpdates(buildProfileFromAccount(backendAccount), {
-        name: String(name || '').trim() || backendAccount.name,
+      
+      // Build profile with Firebase user data
+      const firebaseAccount = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email,
+        name: trimmedName || firebaseUser.email?.split('@')[0] || 'User',
+        password: trimmedPassword,
+        createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+        avatar: getAvatarForEmail(firebaseUser.email),
+        profile: {
+          ...DEFAULT_PROFILE,
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: trimmedName || firebaseUser.email?.split('@')[0] || 'User',
+          avatar: getAvatarForEmail(firebaseUser.email),
+          createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+          role: 'learner',
+          security: {
+            rememberMe,
+            lastLoginAt: loginTimestamp,
+            lastPasswordChangedAt: loginTimestamp,
+          },
+        },
+      };
+
+      const nextProfile = mergeProfileUpdates(buildProfileFromAccount(firebaseAccount), {
+        name: trimmedName || firebaseAccount.name,
         security: {
           rememberMe,
           lastLoginAt: loginTimestamp,
@@ -546,42 +618,70 @@ export function AuthProvider({ children }) {
         loginTimestamp,
       });
 
-      localStorage.setItem('auth-token', data.token);
-    } catch (apiError) {
-      console.error('Backend signup error:', apiError);
-      throw new Error(
-        apiError.message ||
-          'Unable to connect to authentication server. Please ensure the backend server is running on port 4000.'
-      );
+      // Store Firebase ID token
+      localStorage.setItem('firebase-id-token', idToken);
+      localStorage.setItem('firebase-uid', firebaseUser.uid);
+      localStorage.setItem('auth-token', syncData.token);
+    } catch (firebaseError) {
+      console.error('Firebase signup error:', firebaseError);
+      
+      // Map Firebase error codes to user-friendly messages
+      let errorMessage = 'Unable to create account.';
+      if (firebaseError.code === 'auth/email-already-in-use') {
+        errorMessage = 'Email is already registered. Please sign in or use a different email.';
+      } else if (firebaseError.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Please use at least 6 characters.';
+      } else if (firebaseError.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else {
+        errorMessage = firebaseError.message || 'Unable to create account.';
+      }
+      
+      throw new Error(errorMessage);
     }
   };
 
   const login = async ({ email, password, rememberMe = true }) => {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const apiBaseUrl = getAuthApiBaseUrl();
     
+    if (!normalizedEmail || !password) {
+      throw new Error('Email and password are required.');
+    }
+
     try {
-      const response = await fetch(`${apiBaseUrl}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail, password })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Login failed');
-      }
-
-      const data = await response.json();
+      // Sign in with Firebase Authentication
+      const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      const firebaseUser = userCredential.user;
       
-      if (!data.token) {
-        throw new Error('No authentication token received from server');
-      }
-
-      const backendUser = buildBackendAccount(data.user, password);
+      // Get Firebase ID token
+      const idToken = await firebaseUser.getIdToken();
 
       const loginTimestamp = new Date().toISOString();
-      const nextProfile = mergeProfileUpdates(buildProfileFromAccount(backendUser), {
+      
+      // Build profile with Firebase user data
+      const firebaseAccount = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email,
+        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+        password,
+        createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+        avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+        profile: {
+          ...DEFAULT_PROFILE,
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+          createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+          role: 'learner',
+          security: {
+            rememberMe,
+            lastLoginAt: loginTimestamp,
+          },
+        },
+      };
+
+      const nextProfile = mergeProfileUpdates(buildProfileFromAccount(firebaseAccount), {
         security: {
           rememberMe,
           lastLoginAt: loginTimestamp,
@@ -594,15 +694,29 @@ export function AuthProvider({ children }) {
         nextPassword: password,
       });
       
-      // Store the real JWT token from backend
-      localStorage.setItem('auth-token', data.token);
-      return;
-    } catch (apiError) {
-      console.error('Backend login error:', apiError);
-      throw new Error(
-        apiError.message || 
-        'Unable to connect to authentication server. Please ensure the backend server is running on port 4000.'
-      );
+      // Store Firebase ID token and UID
+      localStorage.setItem('firebase-id-token', idToken);
+      localStorage.setItem('firebase-uid', firebaseUser.uid);
+    } catch (firebaseError) {
+      console.error('Firebase login error:', firebaseError);
+      
+      // Map Firebase error codes to user-friendly messages
+      let errorMessage = 'Unable to sign in.';
+      if (firebaseError.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email. Please sign up first.';
+      } else if (firebaseError.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password. Please try again.';
+      } else if (firebaseError.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (firebaseError.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled.';
+      } else if (firebaseError.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed login attempts. Please try again later.';
+      } else {
+        errorMessage = firebaseError.message || 'Unable to sign in.';
+      }
+      
+      throw new Error(errorMessage);
     }
   };
 
@@ -893,9 +1007,163 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     clearStoredSession();
     try {
+      // Sign out from Firebase
+      await signOut(auth);
       localStorage.removeItem('auth-token');
-    } catch {}
+      localStorage.removeItem('firebase-id-token');
+      localStorage.removeItem('firebase-uid');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     setProfile(null);
+  };
+
+  const signInWithGoogle = async ({ rememberMe = true } = {}) => {
+    try {
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const firebaseUser = userCredential.user;
+      const idToken = await firebaseUser.getIdToken();
+      const loginTimestamp = new Date().toISOString();
+
+      // Sync with backend database
+      const apiBaseUrl = getAuthApiBaseUrl();
+      const syncResponse = await fetch(`${apiBaseUrl}/firebase-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebaseUid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+        }),
+      });
+
+      if (!syncResponse.ok) {
+        throw new Error('Failed to sync with backend');
+      }
+
+      const syncData = await syncResponse.json();
+
+      const firebaseAccount = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email,
+        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+        password: '',
+        createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+        avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+        profile: {
+          ...DEFAULT_PROFILE,
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+          createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+          role: 'learner',
+          security: {
+            rememberMe,
+            lastLoginAt: loginTimestamp,
+          },
+        },
+      };
+
+      const nextProfile = mergeProfileUpdates(buildProfileFromAccount(firebaseAccount), {
+        security: {
+          rememberMe,
+          lastLoginAt: loginTimestamp,
+        },
+      });
+
+      persistProfile(nextProfile, {
+        rememberMe,
+        loginTimestamp,
+      });
+
+      localStorage.setItem('firebase-id-token', idToken);
+      localStorage.setItem('firebase-uid', firebaseUser.uid);
+      localStorage.setItem('auth-token', syncData.token);
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      let errorMessage = 'Unable to sign in with Google.';
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in popup was closed.';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please try again.';
+      }
+      throw new Error(errorMessage);
+    }
+  };
+
+  const signInWithGithub = async ({ rememberMe = true } = {}) => {
+    try {
+      const userCredential = await signInWithPopup(auth, githubProvider);
+      const firebaseUser = userCredential.user;
+      const idToken = await firebaseUser.getIdToken();
+      const loginTimestamp = new Date().toISOString();
+
+      // Sync with backend database
+      const apiBaseUrl = getAuthApiBaseUrl();
+      const syncResponse = await fetch(`${apiBaseUrl}/firebase-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebaseUid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+        }),
+      });
+
+      if (!syncResponse.ok) {
+        throw new Error('Failed to sync with backend');
+      }
+
+      const syncData = await syncResponse.json();
+
+      const firebaseAccount = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email,
+        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+        password: '',
+        createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+        avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+        profile: {
+          ...DEFAULT_PROFILE,
+          id: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          avatar: firebaseUser.photoURL || getAvatarForEmail(firebaseUser.email),
+          createdAt: new Date(firebaseUser.metadata.creationTime).toISOString(),
+          role: 'learner',
+          security: {
+            rememberMe,
+            lastLoginAt: loginTimestamp,
+          },
+        },
+      };
+
+      const nextProfile = mergeProfileUpdates(buildProfileFromAccount(firebaseAccount), {
+        security: {
+          rememberMe,
+          lastLoginAt: loginTimestamp,
+        },
+      });
+
+      persistProfile(nextProfile, {
+        rememberMe,
+        loginTimestamp,
+      });
+
+      localStorage.setItem('firebase-id-token', idToken);
+      localStorage.setItem('firebase-uid', firebaseUser.uid);
+      localStorage.setItem('auth-token', syncData.token);
+    } catch (error) {
+      console.error('GitHub sign-in error:', error);
+      let errorMessage = 'Unable to sign in with GitHub.';
+      if (error.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in popup was closed.';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please try again.';
+      }
+      throw new Error(errorMessage);
+    }
   };
 
   const registeredUsers = useMemo(() => buildRegisteredUsers(), [profile]);
@@ -910,6 +1178,8 @@ export function AuthProvider({ children }) {
       login,
       signup,
       logout,
+      signInWithGoogle,
+      signInWithGithub,
       toggleBookmark,
       isBookmarked,
       isProblemSolved,

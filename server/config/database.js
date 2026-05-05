@@ -3,9 +3,28 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
+// Allow self-signed certificates in development for cloud databases like Aiven
+if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
+// Parse DATABASE_URL to handle SSL configuration properly
+const parseConnectionUrl = (url) => {
+  if (!url) return url;
+  
+  // Keep the ssl-mode parameter - it's needed for the connection
+  // MySQL2 will handle it automatically
+  return url;
+};
+
+const sequelize = new Sequelize(parseConnectionUrl(process.env.DATABASE_URL), {
   dialect: 'mysql',
   logging: process.env.NODE_ENV === 'development' ? console.log : false,
+  dialectOptions: {
+    supportBigNumbers: true,
+    bigNumberStrings: true,
+    decimalNumbers: true,
+  },
   pool: {
     max: 10,
     min: 0,

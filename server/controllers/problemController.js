@@ -5,7 +5,6 @@ import geminiService from '../services/geminiService.js';
 import { cacheService } from '../config/redis.js';
 import { Op } from 'sequelize';
 import languageMap from '../utils/languageMap.js';
-import { compareOutputs } from '../utils/outputComparison.js';
 
 // Get all problems
 export const getAllProblems = asyncHandler(async (req, res) => {
@@ -257,7 +256,7 @@ export const submitSolution = asyncHandler(async (req, res) => {
     try {
       const result = await judge0Service.runJudge(language, code, testCase.input || '');
       
-      const passed = compareOutputs(result.stdout || '', testCase.output || '');
+      const passed = result.stdout?.trim() === testCase.output?.trim();
       if (passed) passedCount++;
       
       results.push({
@@ -367,7 +366,7 @@ export const runCode = asyncHandler(async (req, res) => {
     results.push({
       input: testCase.input,
       actualOutput: actualOutput,
-      passed: compareOutputs(actualOutput, expectedOutput),
+      passed: actualOutput === expectedOutput.trim(),
       runtime: result.time,
       memory: result.memory,
       error: result.stderr || result.compile_output || result.error
@@ -486,33 +485,6 @@ export const explainCode = asyncHandler(async (req, res) => {
   res.json({ explanation: result.text });
 });
 
-// Analyze accepted code complexity and suggest an optimized solution
-export const analyzeSolution = asyncHandler(async (req, res) => {
-  const { problem_id, code, language, testResults } = req.body;
-
-  if (!code || !language) {
-    throw new ValidationError('Code and language are required for AI analysis');
-  }
-
-  const problem = problem_id ? await Problem.findByPk(problem_id) : null;
-  if (problem_id && !problem) {
-    throw new NotFoundError('Problem');
-  }
-
-  const result = await geminiService.analyzeSolutionComplexity({
-    problem: problem ? problem.toJSON() : {},
-    code,
-    language,
-    testResults: Array.isArray(testResults) ? testResults : [],
-  });
-
-  if (!result.success) {
-    throw new ValidationError(result.error || 'Failed to analyze solution');
-  }
-
-  res.json({ analysis: result.analysis });
-});
-
 export default {
   getAllProblems,
   getProblemBySlug,
@@ -524,6 +496,5 @@ export default {
   getSubmission,
   getUserSubmissions,
   getProblemHints,
-  explainCode,
-  analyzeSolution
+  explainCode
 };

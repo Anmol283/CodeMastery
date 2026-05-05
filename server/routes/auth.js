@@ -94,6 +94,58 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Firebase user sync route
+router.post('/firebase-sync', async (req, res) => {
+  try {
+    const { firebaseUid, email, displayName } = req.body;
+
+    if (!firebaseUid || !email) {
+      return res.status(400).json({ error: 'Firebase UID and email are required' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const username = displayName ? String(displayName).trim().replace(/\s+/g, '_').toLowerCase() : normalizedEmail.split('@')[0];
+
+    // Find or create user
+    const [user, created] = await User.findOrCreate({
+      where: { email: normalizedEmail },
+      defaults: {
+        email: normalizedEmail,
+        username: username,
+        password_hash: 'firebase_auth', // Placeholder for Firebase users
+        role: 'learner',
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(normalizedEmail)}`
+      }
+    });
+
+    // Update user if it already existed
+    if (!created) {
+      await user.update({
+        last_login: new Date()
+      });
+    } else {
+      // Cache the new user
+      try {
+        await cacheService.set(`user:${user.id}`, user.toJSON(), 3600);
+      } catch (cacheError) {
+        console.warn('Cache write failed:', cacheError.message);
+      }
+    }
+
+    // Generate token
+    const token = generateToken(user.id);
+
+    res.json({
+      message: 'Firebase user synced successfully',
+      token,
+      user: user.toJSON()
+    });
+  } catch (error) {
+    console.error('Firebase sync error:', error);
+    res.status(500).json({ error: 'Failed to sync Firebase user' });
+  }
+});
+
 // Login route
 router.post('/login', loginRateLimit, async (req, res) => {
   try {
