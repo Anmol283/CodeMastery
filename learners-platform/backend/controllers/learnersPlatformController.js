@@ -1,6 +1,7 @@
 import { learningTopics, learnersPlatformMeta } from '../data/topics.js';
 import { searchTopicVideos } from '../services/learnersPlatformYoutubeService.js';
 import { getRedisCacheStatus } from '../../../server/utils/redisCache.js';
+import { Assessment } from '../../../server/models/index.js';
 import {
   generateAssessmentFeedback,
   generateTopicAssessment,
@@ -107,6 +108,74 @@ const getTopicAssessment = async (req, res) => {
     });
   }
 
+  // For DSA topics, fetch MCQs from the Assessment database
+  if (req.params.slug === 'data-structures-and-algorithms') {
+    try {
+      // Fetch all DSA-related MCQs from Assessment table
+      const databaseMcqs = await Assessment.findAll({
+        where: {
+          type: 'mcq'
+        },
+        attributes: [
+          'id',
+          'assessment_id',
+          'type',
+          'topic_slug',
+          'title',
+          'prompt',
+          'focus_area',
+          'options',
+          'correct_option_index',
+          'explanation',
+          'related_problem_id'
+        ],
+        order: [['topic_slug', 'ASC'], ['created_at', 'ASC']],
+        limit: 10
+      });
+
+      // Transform database MCQs to match frontend expectations
+      const mcqs = databaseMcqs.map((mcq) => ({
+        id: mcq.assessment_id,
+        type: 'mcq',
+        title: mcq.title,
+        prompt: mcq.prompt,
+        focusArea: mcq.focus_area,
+        options: mcq.options || [],
+        correctOptionIndex: mcq.correct_option_index,
+        explanation: mcq.explanation,
+        relatedProblemId: mcq.related_problem_id
+      }));
+
+      return res.json({
+        topic: {
+          slug: topic.slug,
+          title: topic.title,
+          level: topic.level,
+          category: topic.category,
+        },
+        assessment: {
+          source: 'database',
+          generatedAt: new Date().toISOString(),
+          cached: false,
+          dueProblemCount: 0,
+          focusAreas: [...new Set(mcqs.map(m => m.focusArea).filter(Boolean))],
+          mcqs: mcqs.slice(0, 5),
+          interviewQuestions: [],
+          basedOnSolvedProblems: [],
+        },
+        cache: {
+          ...getRedisCacheStatus(),
+          key: null,
+          ttlSeconds: null,
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching assessments from database:', error);
+      // Fall back to Gemini generation if database fails
+    }
+  }
+
+  // For other topics, use the adaptive/Gemini-based assessment
   const solvedProblems = Array.isArray(req.body?.solvedProblems) ? req.body.solvedProblems : [];
   const assessment = await generateTopicAssessment(topic, solvedProblems);
 

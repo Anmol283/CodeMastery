@@ -18,6 +18,7 @@ import userdataRouter from './routes/userdata.js';
 import badgeRouter from './routes/badges.js';
 import feedbackRouter from './routes/feedback.js';
 import contestsRouter from './routes/contests.js';
+import assessmentsRouter from './routes/assessments.js';
 import { testConnection, syncDatabase, ensureAuthSchema } from './config/database.js';
 import { createAdminUser } from './seeders/createAdminUser.js';
 import { createBadges } from './seeders/createBadges.js';
@@ -99,6 +100,7 @@ function createApp() {
   app.use('/api/dpp', dppRouter);
   app.use('/api/badges', badgeRouter);
   app.use('/api/feedback', feedbackRouter);
+  app.use('/api/assessments', assessmentsRouter);
 
   app.use('/api/problems', problemsRouter);
   app.use('/api/contests', contestsRouter);

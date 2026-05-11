@@ -485,6 +485,38 @@ export const explainCode = asyncHandler(async (req, res) => {
   res.json({ explanation: result.text });
 });
 
+// Analyze solution complexity
+export const analyzeSolution = asyncHandler(async (req, res) => {
+  const { problem_id, code, language, testResults = [] } = req.body;
+  
+  if (!code || !language) {
+    throw new ValidationError('Code and language are required');
+  }
+  
+  // Get problem details
+  const problem = await Problem.findByPk(problem_id, {
+    attributes: ['id', 'title', 'difficulty', 'description', 'constraints', 'examples', 'test_cases']
+  });
+  
+  if (!problem) {
+    throw new NotFoundError('Problem');
+  }
+  
+  // Analyze the solution using Gemini
+  const result = await geminiService.analyzeSolutionComplexity({
+    problem,
+    code,
+    language,
+    testResults
+  });
+  
+  if (!result.success) {
+    throw new ValidationError(result.error || 'Failed to analyze solution');
+  }
+  
+  res.json({ analysis: result.analysis });
+});
+
 export default {
   getAllProblems,
   getProblemBySlug,
@@ -496,5 +528,6 @@ export default {
   getSubmission,
   getUserSubmissions,
   getProblemHints,
-  explainCode
+  explainCode,
+  analyzeSolution
 };

@@ -13,6 +13,7 @@ import Feedback from './Feedback.js';
 import Contest from './Contest.js';
 import ContestParticipant from './ContestParticipant.js';
 import ContestSubmission from './ContestSubmission.js';
+import Assessment from './Assessment.js';
 
 // Define associations
 UserBadge.belongsTo(Badge, {
@@ -121,4 +122,5 @@ export {
   Contest,
   ContestParticipant,
   ContestSubmission,
+  Assessment,
 };
