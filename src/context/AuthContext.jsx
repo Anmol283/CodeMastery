@@ -656,6 +656,24 @@ export function AuthProvider({ children }) {
       // Get Firebase ID token
       const idToken = await firebaseUser.getIdToken();
 
+      // Sync with backend database
+      const apiBaseUrl = getAuthApiBaseUrl();
+      const syncResponse = await fetch(`${apiBaseUrl}/firebase-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebaseUid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+        }),
+      });
+
+      if (!syncResponse.ok) {
+        console.warn('Failed to sync with backend, continuing anyway');
+      }
+
+      const syncData = syncResponse.ok ? await syncResponse.json() : { token: null };
+
       const loginTimestamp = new Date().toISOString();
       
       // Build profile with Firebase user data
@@ -697,6 +715,11 @@ export function AuthProvider({ children }) {
       // Store Firebase ID token and UID
       localStorage.setItem('firebase-id-token', idToken);
       localStorage.setItem('firebase-uid', firebaseUser.uid);
+      
+      // Store backend JWT token if available
+      if (syncData.token) {
+        localStorage.setItem('auth-token', syncData.token);
+      }
     } catch (firebaseError) {
       console.error('Firebase login error:', firebaseError);
       
