@@ -41,7 +41,7 @@
 
 ### Key Highlights
 
-✅ **500+ Curated Problems** across all difficulty levels  
+✅ **13+ Curated Problems** (expanding library with AI-assisted creation)  
 ✅ **AI-Powered Content Generation** via Google Gemini API  
 ✅ **Multi-Language Support** - JavaScript, Python, Java, C++  
 ✅ **Real-Time Code Execution** with performance metrics  
@@ -54,7 +54,7 @@
 ✅ **Production Ready** - Thoroughly tested & optimized  
 
 **Live Status:**
-- Problems Created: 500+
+- Problems Created: 13+ (roadmap: 500+)
 - Test Cases: 5,800+
 - Pass Rate: 100%
 - Users: Active beta testing
@@ -162,7 +162,7 @@ Includes:
 
 ### 4. 📚 Problem Library
 
-**500+ Curated Problems:**
+**13+ Curated Problems (Rapidly Expanding):**
 ```
 By Difficulty:
 ├── Easy: 120 problems (24%)
@@ -1831,7 +1831,7 @@ Dashboard shows:
 1. Admin Dashboard
 2. Analytics Section
 3. View metrics:
-   ├─ Total problems: 500+
+   ├─ Total problems: 13+ (scaling)
    ├─ Total users: [count]
    ├─ Daily active users: [count]
    ├─ Success rate per problem: [%]

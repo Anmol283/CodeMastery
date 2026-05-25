@@ -5,7 +5,7 @@
 
 ## ✨ Overview
 
-CodeMastery is a comprehensive Data Structures & Algorithms (DSA) learning platform designed to mimic the professional experience of sites like LeetCode. Built with a modern stack including React, Node.js, and Sequelize, it features an interactive Monaco code editor, real-time feedback, gamified progression, and a robust library of 500+ problems.
+CodeMastery is a comprehensive Data Structures & Algorithms (DSA) learning platform designed to mimic the professional experience of sites like LeetCode. Built with a modern stack including React, Node.js, and Sequelize, it features an interactive Monaco code editor, real-time feedback, gamified progression, and a robust library of 13+ problems (rapidly expanding with AI-assisted content creation).
 
 ---
 
@@ -45,7 +45,7 @@ CodeMastery is a comprehensive Data Structures & Algorithms (DSA) learning platf
   - Streak tracking to maintain learning consistency
 
 - **📚 Problem Library**
-  - 500+ problems categorized by difficulty and topic
+  - 13+ problems categorized by difficulty and topic (expanding with AI assistance)
   - Advanced filtering by Company (FAANG) and Tags  
   - Community discussion threads and upvoting  
 

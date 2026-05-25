@@ -40,7 +40,7 @@ export function HomePage() {
             Master Data Structures & Algorithms
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Solve hundreds of DSA problems with an interactive code editor, detailed solutions, and real-time feedback.
+            Solve 13+ DSA problems with an interactive code editor, detailed solutions, and real-time feedback. Growing library powered by AI.
           </p>
           <div className="flex gap-4 justify-center">
             <Link to="/sign-up">

@@ -104,7 +104,15 @@ router.post('/firebase-sync', async (req, res) => {
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
-    const username = displayName ? String(displayName).trim().replace(/\s+/g, '_').toLowerCase() : normalizedEmail.split('@')[0];
+    let username = displayName ? String(displayName).trim().replace(/\s+/g, '_').toLowerCase() : normalizedEmail.split('@')[0];
+
+    // Check if username already exists and generate a unique one if needed
+    let usernameExists = await User.findOne({ where: { username } });
+    if (usernameExists) {
+      // Generate unique username by appending a timestamp
+      const timestamp = Date.now().toString().slice(-6);
+      username = `${username}_${timestamp}`;
+    }
 
     // Find or create user
     const [user, created] = await User.findOrCreate({

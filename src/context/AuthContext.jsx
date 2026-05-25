@@ -237,6 +237,11 @@ const deriveRole = (storedProfile, email) => {
     return 'admin';
   }
 
+  // Assign interviewer role to interviewer email
+  if (normalizedEmail === 'interviewer@codemastery.com') {
+    return 'interviewer';
+  }
+
   const managedRole = adminSettings.managedUsers.find(
     (entry) => String(entry.email || '').trim().toLowerCase() === normalizedEmail
   )?.role;
