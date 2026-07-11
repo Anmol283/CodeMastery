@@ -136,7 +136,7 @@ Elara-Regency/
 1. **Clone the Repository**:
    ```bash
    git clone https://github.com/AkshitSalwan/CodeMastery
-   cd elara-regency
+   cd CodeMastery
    ```
 
 2. **Install Dependencies**:
