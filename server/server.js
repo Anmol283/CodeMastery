@@ -3,6 +3,11 @@ import express from 'express';
 import path from 'path';
 import http from 'http';
 import { fileURLToPath } from 'url';
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import judgeService from './services/judgeService.js';
 import compareOutput from './utils/compareOutput.js';
 import {
