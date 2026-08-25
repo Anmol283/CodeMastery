@@ -1,43 +1,61 @@
+import path from 'path';
 import { Sequelize, DataTypes } from 'sequelize';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Allow self-signed certificates in development for cloud databases like Aiven
-if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
+const getDefaultSqlitePath = () => process.env.SQLITE_PATH || path.resolve(process.cwd(), 'server', 'database.sqlite');
 
-// Parse DATABASE_URL to handle SSL configuration properly
-const parseConnectionUrl = (url) => {
-  if (!url) return url;
-  
-  // Keep the ssl-mode parameter - it's needed for the connection
-  // MySQL2 will handle it automatically
-  return url;
+export const resolveDatabaseConfig = () => {
+  const configuredUrl = (process.env.DATABASE_URL || '').trim();
+  const isAivenUrl = /aivencloud\.com/i.test(configuredUrl);
+  const shouldUseSqliteFallback =
+  process.env.USE_SQLITE_FALLBACK === 'true' ||
+  process.env.USE_SQLITE_FALLBACK === '1' ||
+  !configuredUrl;
+
+  if (shouldUseSqliteFallback) {
+    const sqlitePath = getDefaultSqlitePath();
+    console.warn('⚠️ Remote database unavailable or disabled. Using local SQLite fallback at', sqlitePath);
+    return {
+      dialect: 'sqlite',
+      storage: sqlitePath,
+      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      define: {
+        timestamps: true,
+        underscored: true,
+        createdAt: 'created_at',
+        updatedAt: 'updated_at'
+      }
+    };
+  }
+
+  return {
+    url: configuredUrl,
+    dialect: 'mysql',
+    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    pool: {
+      max: 10,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    },
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    },
+    define: {
+      timestamps: true,
+      underscored: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at'
+    }
+  };
 };
 
-const sequelize = new Sequelize(parseConnectionUrl(process.env.DATABASE_URL), {
-  dialect: 'mysql',
-  logging: process.env.NODE_ENV === 'development' ? console.log : false,
-  dialectOptions: {
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-    decimalNumbers: true,
-  },
-  pool: {
-    max: 10,
-    min: 0,
-    acquire: 30000,
-    idle: 10000
-  },
-  define: {
-    timestamps: true,
-    underscored: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at'
-  }
-});
+const sequelize = new Sequelize(resolveDatabaseConfig());
 
 // Test connection
 const testConnection = async () => {
@@ -45,6 +63,11 @@ const testConnection = async () => {
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully.');
   } catch (error) {
+    if (sequelize.getDialect() === 'sqlite') {
+      console.warn('⚠️ SQLite fallback is active; continuing without the remote database.');
+      return;
+    }
+
     console.error('❌ Unable to connect to database:', error.message);
     process.exit(1);
   }
@@ -71,11 +94,13 @@ const ensureAuthSchema = async () => {
     const table = await queryInterface.describeTable('users');
 
     if (!table.phone_number) {
-      await queryInterface.addColumn('users', 'phone_number', {
+      const columnDefinition = {
         type: DataTypes.STRING(20),
         allowNull: true,
-        unique: true,
-      });
+        unique: sequelize.getDialect() !== 'sqlite',
+      };
+
+      await queryInterface.addColumn('users', 'phone_number', columnDefinition);
       console.log('Added users.phone_number column for OTP recovery.');
     }
   } catch (error) {
