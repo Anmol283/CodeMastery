@@ -6,21 +6,83 @@ dotenv.config();
 
 const getDefaultSqlitePath = () => process.env.SQLITE_PATH || path.resolve(process.cwd(), 'server', 'database.sqlite');
 
+// export const resolveDatabaseConfig = () => {
+//   const configuredUrl = (process.env.DATABASE_URL || '').trim();
+//   const isAivenUrl = /aivencloud\.com/i.test(configuredUrl);
+//   const shouldUseSqliteFallback =
+//   process.env.USE_SQLITE_FALLBACK === 'true' ||
+//   process.env.USE_SQLITE_FALLBACK === '1' ||
+//   !configuredUrl;
+
+//   if (shouldUseSqliteFallback) {
+//     const sqlitePath = getDefaultSqlitePath();
+//     console.warn('⚠️ Remote database unavailable or disabled. Using local SQLite fallback at', sqlitePath);
+//     return {
+//       dialect: 'sqlite',
+//       storage: sqlitePath,
+//       logging: process.env.NODE_ENV === 'development' ? console.log : false,
+//       define: {
+//         timestamps: true,
+//         underscored: true,
+//         createdAt: 'created_at',
+//         updatedAt: 'updated_at'
+//       }
+//     };
+//   }
+
+//   return {
+//     url: configuredUrl,
+//     dialect: 'mysql',
+//     logging: process.env.NODE_ENV === 'development' ? console.log : false,
+//     pool: {
+//       max: 10,
+//       min: 0,
+//       acquire: 30000,
+//       idle: 10000
+//     },
+//     dialectOptions: {
+//       ssl: {
+//         require: true,
+//         rejectUnauthorized: false
+//       }
+//     },
+//     define: {
+//       timestamps: true,
+//       underscored: true,
+//       createdAt: 'created_at',
+//       updatedAt: 'updated_at'
+//     }
+//   };
+// };
 export const resolveDatabaseConfig = () => {
   const configuredUrl = (process.env.DATABASE_URL || '').trim();
-  const isAivenUrl = /aivencloud\.com/i.test(configuredUrl);
-  const shouldUseSqliteFallback =
-  process.env.USE_SQLITE_FALLBACK === 'true' ||
-  process.env.USE_SQLITE_FALLBACK === '1' ||
-  !configuredUrl;
 
-  if (shouldUseSqliteFallback) {
+  const useSqliteFallback =
+    process.env.NODE_ENV !== 'production' &&
+    (
+      process.env.USE_SQLITE_FALLBACK === 'true' ||
+      process.env.USE_SQLITE_FALLBACK === '1' ||
+      !configuredUrl
+    );
+
+  if (process.env.NODE_ENV === 'production' && !configuredUrl) {
+    throw new Error(
+      'DATABASE_URL is required in production. Configure it in Render Environment.'
+    );
+  }
+
+  if (useSqliteFallback) {
     const sqlitePath = getDefaultSqlitePath();
-    console.warn('⚠️ Remote database unavailable or disabled. Using local SQLite fallback at', sqlitePath);
+
+    console.warn(
+      'Using local SQLite fallback at',
+      sqlitePath
+    );
+
     return {
       dialect: 'sqlite',
       storage: sqlitePath,
-      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      logging: false,
       define: {
         timestamps: true,
         underscored: true,
