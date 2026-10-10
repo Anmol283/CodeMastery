@@ -120,18 +120,33 @@ export const resolveDatabaseConfig = () => {
 const sequelize = new Sequelize(resolveDatabaseConfig());
 
 // Test connection
+// const testConnection = async () => {
+//   try {
+//     await sequelize.authenticate();
+//     console.log('✅ Database connection established successfully.');
+//   } catch (error) {
+//     if (sequelize.getDialect() === 'sqlite') {
+//       console.warn('⚠️ SQLite fallback is active; continuing without the remote database.');
+//       return;
+//     }
+
+//     console.error('❌ Unable to connect to database:', error.message);
+//     process.exit(1);
+//   }
+// };
+
 const testConnection = async () => {
   try {
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully.');
   } catch (error) {
-    if (sequelize.getDialect() === 'sqlite') {
-      console.warn('⚠️ SQLite fallback is active; continuing without the remote database.');
-      return;
-    }
+    console.error('❌ Unable to connect to database');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.original?.code);
+    console.error('Error details:', error.original?.sqlMessage || error.parent?.message || 'No additional details');
 
-    console.error('❌ Unable to connect to database:', error.message);
-    process.exit(1);
+    throw error;
   }
 };
 
