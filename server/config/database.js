@@ -118,7 +118,20 @@ export const resolveDatabaseConfig = () => {
   };
 };
 
-const sequelize = new Sequelize(resolveDatabaseConfig());
+
+const databaseConfig = resolveDatabaseConfig();
+
+const sequelize =
+  databaseConfig.dialect === 'sqlite'
+    ? new Sequelize(databaseConfig)
+    : new Sequelize(databaseConfig.url, {
+        dialect: databaseConfig.dialect,
+        logging: databaseConfig.logging,
+        pool: databaseConfig.pool,
+        dialectOptions: databaseConfig.dialectOptions,
+        define: databaseConfig.define,
+      });
+
 
 // Test connection
 // const testConnection = async () => {
