@@ -1,6 +1,7 @@
 import path from 'path';
 import { Sequelize, DataTypes } from 'sequelize';
 import dotenv from 'dotenv';
+import dns from 'node:dns/promises';
 
 dotenv.config();
 
@@ -137,15 +138,25 @@ const sequelize = new Sequelize(resolveDatabaseConfig());
 
 const testConnection = async () => {
   try {
+    const dbUrl = new URL(process.env.DATABASE_URL);
+
+    console.log('DB host:', dbUrl.hostname);
+    console.log('DB port:', dbUrl.port || '3306');
+
+    try {
+      const addresses = await dns.lookup(dbUrl.hostname, { all: true });
+      console.log('DB DNS addresses:', addresses);
+    } catch (err) {
+      console.error('DB DNS lookup failed:', err.code, err.message);
+    }
+
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully.');
   } catch (error) {
     console.error('❌ Unable to connect to database');
     console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
     console.error('Error code:', error.original?.code);
     console.error('Error details:', error.original?.sqlMessage || error.parent?.message || 'No additional details');
-
     throw error;
   }
 };
