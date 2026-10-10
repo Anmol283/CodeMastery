@@ -136,6 +136,7 @@ const sequelize = new Sequelize(resolveDatabaseConfig());
 //   }
 // };
 
+
 const testConnection = async () => {
   try {
     const dbUrl = new URL(process.env.DATABASE_URL);
@@ -144,10 +145,16 @@ const testConnection = async () => {
     console.log('DB port:', dbUrl.port || '3306');
 
     try {
-      const addresses = await dns.lookup(dbUrl.hostname, { all: true });
+      const addresses = await dns.lookup(dbUrl.hostname, {
+        all: true
+      });
       console.log('DB DNS addresses:', addresses);
     } catch (err) {
-      console.error('DB DNS lookup failed:', err.code, err.message);
+      console.error(
+        'DB DNS lookup failed:',
+        err.code,
+        err.message
+      );
     }
 
     await sequelize.authenticate();
@@ -156,10 +163,29 @@ const testConnection = async () => {
     console.error('❌ Unable to connect to database');
     console.error('Error name:', error.name);
     console.error('Error code:', error.original?.code);
-    console.error('Error details:', error.original?.sqlMessage || error.parent?.message || 'No additional details');
+    console.error(
+      'Error details:',
+      error.original?.sqlMessage ||
+        error.parent?.message ||
+        'No additional details'
+    );
+
+    const connectionErrors =
+      error.original?.errors || error.parent?.errors || [];
+
+    for (const err of connectionErrors) {
+      console.error('Individual connection error:', {
+        code: err.code,
+        address: err.address,
+        port: err.port,
+        message: err.message
+      });
+    }
+
     throw error;
   }
 };
+
 
 // Sync database
 const syncDatabase = async (force = false) => {
