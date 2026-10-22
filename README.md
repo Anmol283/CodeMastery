@@ -170,6 +170,8 @@ npm run test:e2e    # run end-to-end tests
 ```
 
 When using the local SQLite fallback, run `npm run seed:problems` once to load the bundled problem catalog. This command only runs against SQLite and leaves existing records untouched.
+
+To add the bundled catalog to a deployed MySQL database, open the backend service's Render Shell and run `ALLOW_REMOTE_PROBLEM_SEED=true npm run seed:problems`. This explicitly allows the script to use the service's existing `DATABASE_URL`; it inserts only missing bundled topics and problems and does not sync, clear, or overwrite database records. Do not set this flag as a persistent service environment variable.
 ---
 
 ## 📜 License

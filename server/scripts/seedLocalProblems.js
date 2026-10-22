@@ -3,12 +3,19 @@ import { problemsData, topicsData } from '../seeders/index.js';
 
 async function seedLocalProblems() {
   try {
-    if (sequelize.getDialect() !== 'sqlite') {
-      throw new Error('The bundled problem seed can only run against the local SQLite database.');
+    const dialect = sequelize.getDialect();
+    const allowRemoteSeed = process.env.ALLOW_REMOTE_PROBLEM_SEED === 'true';
+
+    if (dialect !== 'sqlite' && !allowRemoteSeed) {
+      throw new Error(
+        'Refusing to seed a non-SQLite database. Set ALLOW_REMOTE_PROBLEM_SEED=true to explicitly allow a non-destructive remote seed.'
+      );
     }
 
     await sequelize.authenticate();
-    await sequelize.sync();
+    if (dialect === 'sqlite') {
+      await sequelize.sync();
+    }
 
     const { createdTopics, createdProblems } = await sequelize.transaction(async (transaction) => {
       const topicRows = [];
@@ -43,7 +50,9 @@ async function seedLocalProblems() {
       return { createdTopics, createdProblems };
     });
 
-    console.log(`Local SQLite seed complete: added ${createdTopics} topics and ${createdProblems} problems.`);
+    console.log(
+      `Problem seed complete (${dialect}): added ${createdTopics} topics and ${createdProblems} problems.`
+    );
   } finally {
     await sequelize.close();
   }
