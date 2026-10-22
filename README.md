@@ -164,9 +164,12 @@ npm run dev:server
 ```bash
 npm run build       # build the frontend for production
 npm start           # start the backend server only
+npm run seed:problems # add bundled problems to the local SQLite database
 npm test            # run Jest tests
 npm run test:e2e    # run end-to-end tests
 ```
+
+When using the local SQLite fallback, run `npm run seed:problems` once to load the bundled problem catalog. This command only runs against SQLite and leaves existing records untouched.
 ---
 
 ## 📜 License

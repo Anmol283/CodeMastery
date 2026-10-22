@@ -2,7 +2,7 @@ import { Topic, Problem, Badge, User, Resource } from '../models/index.js';
 import { sequelize } from '../config/database.js';
 
 // Seed topics
-const topicsData = [
+export const topicsData = [
   {
     name: 'Arrays',
     slug: 'arrays',
@@ -143,7 +143,7 @@ const topicsData = [
 ];
 
 // Seed problems
-const problemsData = [
+export const problemsData = [
   // Arrays problems
   {
     title: 'Two Sum',
